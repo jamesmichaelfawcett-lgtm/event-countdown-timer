@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Event Timer Display</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg:#000000; --text:#00e676; --accent:#00e676;
+  --font-size:160px; --title-size:52px; --flash-speed:0.8s;
+}
+html,body { width:100%;height:100%;overflow:hidden;background:var(--bg);transition:background 0.8s ease;user-select:none;cursor:none; }
+
+#grid-overlay {
+  position:fixed;inset:0;pointer-events:none;z-index:1;
+  background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px);
+  background-size:60px 60px;
+  display:none;
+}
+#grid-overlay.visible { display:block; }
+
+/* Traffic Light */
+#traffic-light {
+  position:fixed;top:32px;left:50%;transform:translateX(-50%);
+  display:none;align-items:center;gap:18px;
+  background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);
+  border-radius:50px;padding:12px 28px;z-index:10;
+  backdrop-filter:blur(8px);
+}
+#traffic-light.visible { display:flex; }
+.tl-light {
+  width:36px;height:36px;border-radius:50%;
+  transition:all 0.5s ease;
+  border:2px solid rgba(255,255,255,0.1);
+}
+.tl-light.tl-red   { background:#330000; }
+.tl-light.tl-amber { background:#332200; }
+.tl-light.tl-green { background:#003300; }
+.tl-light.tl-red.active   { background:#ff1744;box-shadow:0 0 20px #ff1744,0 0 40px #ff174466; }
+.tl-light.tl-amber.active { background:#ffab00;box-shadow:0 0 20px #ffab00,0 0 40px #ffab0066; }
+.tl-light.tl-green.active { background:#00e676;box-shadow:0 0 20px #00e676,0 0 40px #00e67666; }
+
+#container {
+  width:100%;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;position:relative;
+  padding-bottom:18px;z-index:2;
+}
+#session-name {
+  font-family:'Rajdhani',sans-serif;font-size:var(--title-size);font-weight:600;
+  color:var(--text);letter-spacing:0.12em;text-transform:uppercase;
+  margin-bottom:16px;opacity:0.85;text-align:center;max-width:90vw;
+  transition:color 0.8s ease;
+}
+#overtime-badge {
+  font-family:'Rajdhani',sans-serif;font-size:2.2rem;font-weight:700;
+  color:var(--text);letter-spacing:0.15em;background:rgba(255,255,255,0.08);
+  border:1px solid var(--text);border-radius:6px;padding:8px 18px;margin-bottom:20px;
+  opacity:0;transform:translateY(-10px);
+  transition:opacity 0.4s,transform 0.4s,color 0.8s,border-color 0.8s;text-align:center;
+}
+#overtime-badge.visible { opacity:1;transform:translateY(0); }
+#timer {
+  font-family:'Orbitron',monospace;font-size:var(--font-size);font-weight:900;
+  color:var(--text);letter-spacing:0.04em;line-height:1;
+  transition:color 0.8s ease,text-shadow 0.8s ease;text-align:center;position:relative;z-index:2;
+}
+@keyframes pulse-flash { 0%,100%{opacity:1}50%{opacity:0.3} }
+#timer.flashing { animation:pulse-flash var(--flash-speed) ease-in-out infinite; }
+
+#message-overlay {
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);
+  max-width:80vw;min-width:400px;padding:20px 40px;
+  background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.25);
+  border-radius:8px;backdrop-filter:blur(10px);
+  opacity:0;transition:opacity 0.4s ease,transform 0.4s ease;z-index:100;pointer-events:none;
+}
+#message-overlay.visible { opacity:1;transform:translateX(-50%) translateY(0); }
+#message-text { font-family:'Rajdhani',sans-serif;font-size:2rem;font-weight:600;color:#fff;text-align:center;letter-spacing:0.05em; }
+#progress-container { position:fixed;bottom:0;left:0;right:0;height:14px;background:rgba(255,255,255,0.06);overflow:hidden;z-index:5; }
+#progress-bar { height:100%;width:100%;background:var(--text);transform-origin:left center;transition:width 0.9s linear,background 0.8s ease;box-shadow:0 0 12px var(--accent); }
+#progress-container.hidden { display:none; }
+
+/* Blackout overlay */
+#blackout {
+  position:fixed;inset:0;background:#000;z-index:999;
+  opacity:0;pointer-events:none;transition:opacity 0.4s ease;
+}
+#blackout.active { opacity:1;pointer-events:all; }
+</style>
+</head>
+<body>
+<div id="grid-overlay"></div>
+<div id="traffic-light">
+  <div class="tl-light tl-red" id="tl-red"></div>
+  <div class="tl-light tl-amber" id="tl-amber"></div>
+  <div class="tl-light tl-green" id="tl-green"></div>
+</div>
+<div id="container">
+  <div id="session-name">Session Title</div>
+  <div id="overtime-badge">OVERTIME</div>
+  <div id="timer">00:00</div>
+</div>
+<div id="message-overlay"><div id="message-text"></div></div>
+<div id="progress-container"><div id="progress-bar"></div></div>
+<div id="blackout"></div>
+<script>
+const timerEl=document.getElementById('timer');
+const sessionNameEl=document.getElementById('session-name');
+const overtimeBadge=document.getElementById('overtime-badge');
+const messageOverlay=document.getElementById('message-overlay');
+const messageText=document.getElementById('message-text');
+const progressBar=document.getElementById('progress-bar');
+const progressContainer=document.getElementById('progress-container');
+const blackoutEl=document.getElementById('blackout');
+const gridOverlay=document.getElementById('grid-overlay');
+const trafficLight=document.getElementById('traffic-light');
+const tlRed=document.getElementById('tl-red');
+const tlAmber=document.getElementById('tl-amber');
+const tlGreen=document.getElementById('tl-green');
+
+function formatTime(totalSeconds){
+  const abs=Math.abs(totalSeconds);
+  const h=Math.floor(abs/3600);
+  const m=Math.floor((abs%3600)/60);
+  const s=abs%60;
+  if(h>0) return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+
+function applyState(state){
+  const s=state.settings;
+
+  // Blackout
+  blackoutEl.classList.toggle('active', !!state.blackout);
+
+  // Grid
+  gridOverlay.classList.toggle('visible', !!s.gridEnabled);
+
+  // Colors
+  const phaseColors={
+    green:{bg:s.greenBg,text:s.greenText},
+    amber:{bg:s.amberBg,text:s.amberText},
+    red:{bg:s.redBg,text:s.redText}
+  };
+  const colors=phaseColors[state.phase]||phaseColors.green;
+  document.documentElement.style.setProperty('--bg',colors.bg);
+  document.documentElement.style.setProperty('--text',colors.text);
+  document.documentElement.style.setProperty('--accent',colors.text);
+  document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
+  document.documentElement.style.setProperty('--title-size',s.titleFontSize+'px');
+  document.documentElement.style.setProperty('--flash-speed',(s.flashSpeed||0.8)+'s');
+  document.body.style.background=colors.bg;
+
+  // Timer text
+  let displayTime='';
+  if(state.isCountingUp) displayTime='+'+formatTime(state.countUpTime);
+  else displayTime=formatTime(state.timeRemaining);
+  timerEl.textContent=displayTime;
+  timerEl.style.fontFamily="'"+s.fontFamily+"',Orbitron,monospace";
+  timerEl.style.fontSize=s.fontSize+'px';
+  timerEl.style.color=colors.text;
+
+  // Glow
+  if(s.glowEnabled){
+    timerEl.style.textShadow='0 0 30px '+colors.text+',0 0 60px '+colors.text+'44,0 0 100px '+colors.text+'22';
+    sessionNameEl.style.textShadow='0 0 40px '+colors.text+'66';
+  } else {
+    timerEl.style.textShadow='none';
+    sessionNameEl.style.textShadow='none';
+  }
+
+  // Flash
+  const flashThresh = s.flashThreshold !== undefined ? s.flashThreshold : 10;
+  const shouldFlash = s.flashEnabled && !state.isCountingUp && state.timeRemaining <= flashThresh && state.timeRemaining > 0 && state.isRunning;
+  timerEl.classList.toggle('flashing', shouldFlash);
+
+  // Session name
+  sessionNameEl.textContent=state.currentSession?state.currentSession.name:'';
+  sessionNameEl.style.color=colors.text;
+  sessionNameEl.style.fontSize=s.titleFontSize+'px';
+  sessionNameEl.style.fontFamily="'"+s.fontFamily+"',Rajdhani,sans-serif";
+
+  // Overtime badge
+  if(state.isCountingUp){
+    overtimeBadge.classList.add('visible');
+    overtimeBadge.style.color=colors.text;
+    overtimeBadge.style.borderColor=colors.text;
+  } else {
+    overtimeBadge.classList.remove('visible');
+  }
+
+  // Message
+  if(state.showMessage&&state.message){
+    messageText.textContent=state.message;
+    messageText.style.color=s.messageTextColor||'#ffffff';
+    messageOverlay.style.background=s.messageBgColor||'rgba(0,0,0,0.75)';
+    messageOverlay.classList.add('visible');
+  } else {
+    messageOverlay.classList.remove('visible');
+  }
+
+  // Progress bar
+  if(s.progressBarEnabled){
+    progressContainer.classList.remove('hidden');
+    const pct=Math.max(0,Math.min(1,state.progress))*100;
+    progressBar.style.width=pct+'%';
+    progressBar.style.background=colors.text;
+    progressBar.style.boxShadow='0 0 12px '+colors.text;
+  } else {
+    progressContainer.classList.add('hidden');
+  }
+
+  // Traffic light
+  if(s.trafficLightEnabled){
+    trafficLight.classList.add('visible');
+    tlRed.classList.toggle('active', state.phase==='red');
+    tlAmber.classList.toggle('active', state.phase==='amber');
+    tlGreen.classList.toggle('active', state.phase==='green');
+  } else {
+    trafficLight.classList.remove('visible');
+  }
+}
+
+window.displayAPI.getState().then(applyState);
+window.displayAPI.onStateUpdate(applyState);
+</script>
+</body>
+</html>
