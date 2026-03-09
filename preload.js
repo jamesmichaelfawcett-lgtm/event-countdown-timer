@@ -1,0 +1,27 @@
+const { contextBridge, ipcRenderer } = require("electron");
+
+contextBridge.exposeInMainWorld("timerAPI", {
+  getState: () => ipcRenderer.invoke("state:get"),
+  start: () => ipcRenderer.invoke("timer:start"),
+  pause: () => ipcRenderer.invoke("timer:pause"),
+  reset: () => ipcRenderer.invoke("timer:reset"),
+  flash: () => ipcRenderer.invoke("timer:flash"),
+  adjustTime: (s) => ipcRenderer.invoke("timer:adjustTime", s),
+  selectSession: (i) => ipcRenderer.invoke("session:select", i),
+  addSession: (s) => ipcRenderer.invoke("session:add", s),
+  updateSession: (i, u) => ipcRenderer.invoke("session:update", { index: i, updates: u }),
+  deleteSession: (i) => ipcRenderer.invoke("session:delete", i),
+  duplicateSession: (i) => ipcRenderer.invoke("session:duplicate", i),
+  moveSession: (f, t) => ipcRenderer.invoke("session:move", { fromIndex: f, toIndex: t }),
+  setMessage: (m, s) => ipcRenderer.invoke("message:set", { message: m, show: s }),
+  updateSettings: (u) => ipcRenderer.invoke("settings:update", u),
+  saveState: () => ipcRenderer.invoke("state:save"),
+  exportState: () => ipcRenderer.invoke("state:export"),
+  importState: () => ipcRenderer.invoke("state:import"),
+  toggleFullscreen: () => ipcRenderer.invoke("display:toggleFullscreen"),
+  toggleBlackout: () => ipcRenderer.invoke("display:blackout"),
+  getDisplays: () => ipcRenderer.invoke("display:getDisplays"),
+  moveToDisplay: (id) => ipcRenderer.invoke("display:moveToDisplay", id),
+  onStateUpdate: (cb) => ipcRenderer.on("state:update", (_, s) => cb(s)),
+  onChime: (cb) => ipcRenderer.on("chime:play", (_, data) => cb(data)),
+});

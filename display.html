@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Event Timer Display</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root { --bg:#000000; --text:#00e676; --font-size:160px; --title-size:52px; --speaker-size:36px; --flash-speed:0.8s; }
+html,body { width:100%;height:100%;overflow:hidden;background:var(--bg);transition:background 0.8s;user-select:none;cursor:none; }
+#grid-overlay { position:fixed;inset:0;pointer-events:none;z-index:1;display:none;
+  background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px);
+  background-size:60px 60px; }
+#grid-overlay.visible { display:block; }
+#traffic-light { position:fixed;top:32px;left:50%;transform:translateX(-50%);display:none;align-items:center;gap:18px;
+  background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1);border-radius:50px;padding:12px 28px;z-index:10;backdrop-filter:blur(8px); }
+#traffic-light.visible { display:flex; }
+.tl-light { width:36px;height:36px;border-radius:50%;transition:all 0.5s;border:2px solid rgba(255,255,255,0.1); }
+.tl-light.tl-red { background:#330000; } .tl-light.tl-amber { background:#332200; } .tl-light.tl-green { background:#003300; }
+.tl-light.tl-red.active { background:#ff1744;box-shadow:0 0 20px #ff1744,0 0 40px #ff174466; }
+.tl-light.tl-amber.active { background:#ffab00;box-shadow:0 0 20px #ffab00,0 0 40px #ffab0066; }
+.tl-light.tl-green.active { background:#00e676;box-shadow:0 0 20px #00e676,0 0 40px #00e67666; }
+#container { width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;padding-bottom:18px;z-index:2; }
+#session-name { font-family:'Rajdhani',sans-serif;font-size:var(--title-size);font-weight:600;color:var(--text);letter-spacing:0.12em;
+  text-transform:uppercase;margin-bottom:8px;opacity:0.85;text-align:center;max-width:90vw;transition:color 0.8s; }
+#speaker-name { font-family:'Rajdhani',sans-serif;font-size:var(--speaker-size);font-weight:400;color:var(--text);letter-spacing:0.08em;
+  margin-bottom:14px;opacity:0.6;text-align:center;max-width:90vw;transition:color 0.8s;min-height:1em; }
+#overtime-badge { font-family:'Rajdhani',sans-serif;font-size:2.2rem;font-weight:700;color:var(--text);letter-spacing:0.15em;
+  background:rgba(255,255,255,0.08);border:1px solid var(--text);border-radius:6px;padding:8px 18px;margin-bottom:20px;
+  opacity:0;transform:translateY(-10px);transition:opacity 0.4s,transform 0.4s,color 0.8s,border-color 0.8s; }
+#overtime-badge.visible { opacity:1;transform:translateY(0); }
+#timer { font-family:'Orbitron',monospace;font-size:var(--font-size);font-weight:900;color:var(--text);letter-spacing:0.04em;line-height:1;
+  transition:color 0.8s,text-shadow 0.8s;text-align:center;position:relative;z-index:2; }
+#clock-display { font-family:'Orbitron',monospace;font-size:calc(var(--font-size) * 0.5);font-weight:700;color:var(--text);letter-spacing:0.06em;
+  opacity:0.5;text-align:center;margin-top:12px;transition:color 0.8s,opacity 0.5s; }
+#clock-display.primary { font-size:var(--font-size);opacity:0.9; }
+@keyframes pulse-flash { 0%,100%{opacity:1}50%{opacity:0.25} }
+@keyframes manual-flash { 0%,100%{opacity:1}12%,36%,62%{opacity:0.05}24%,48%,74%{opacity:1} }
+#timer.flashing { animation:pulse-flash var(--flash-speed) ease-in-out infinite; }
+#container.manual-flash { animation:manual-flash 1.2s ease-in-out 1; }
+#message-overlay { position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);max-width:80vw;min-width:400px;
+  padding:20px 40px;background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.25);border-radius:8px;backdrop-filter:blur(10px);
+  opacity:0;transition:opacity 0.4s,transform 0.4s;z-index:100;pointer-events:none; }
+#message-overlay.visible { opacity:1;transform:translateX(-50%) translateY(0); }
+#message-text { font-family:'Rajdhani',sans-serif;font-size:2rem;font-weight:600;color:#fff;text-align:center;letter-spacing:0.05em; }
+#progress-container { position:fixed;bottom:0;left:0;right:0;height:14px;background:rgba(255,255,255,0.06);overflow:hidden;z-index:5; }
+#progress-bar { height:100%;width:100%;background:var(--text);transform-origin:left;transition:width 0.9s linear,background 0.8s;box-shadow:0 0 12px var(--text); }
+#progress-container.hidden { display:none; }
+#blackout { position:fixed;inset:0;background:#000;z-index:999;opacity:0;pointer-events:none;transition:opacity 0.4s; }
+#blackout.active { opacity:1;pointer-events:all; }
+</style>
+</head>
+<body>
+<div id="grid-overlay"></div>
+<div id="traffic-light">
+  <div class="tl-light tl-red" id="tl-red"></div>
+  <div class="tl-light tl-amber" id="tl-amber"></div>
+  <div class="tl-light tl-green" id="tl-green"></div>
+</div>
+<div id="container">
+  <div id="session-name"></div>
+  <div id="speaker-name"></div>
+  <div id="overtime-badge">OVERTIME</div>
+  <div id="timer">00:00</div>
+  <div id="clock-display"></div>
+</div>
+<div id="message-overlay"><div id="message-text"></div></div>
+<div id="progress-container"><div id="progress-bar"></div></div>
+<div id="blackout"></div>
+<script>
+const timerEl=document.getElementById('timer');
+const sessionNameEl=document.getElementById('session-name');
+const speakerNameEl=document.getElementById('speaker-name');
+const overtimeBadge=document.getElementById('overtime-badge');
+const messageOverlay=document.getElementById('message-overlay');
+const messageText=document.getElementById('message-text');
+const progressBar=document.getElementById('progress-bar');
+const progressContainer=document.getElementById('progress-container');
+const blackoutEl=document.getElementById('blackout');
+const gridOverlay=document.getElementById('grid-overlay');
+const trafficLight=document.getElementById('traffic-light');
+const tlRed=document.getElementById('tl-red');
+const tlAmber=document.getElementById('tl-amber');
+const tlGreen=document.getElementById('tl-green');
+const clockDisplay=document.getElementById('clock-display');
+const container=document.getElementById('container');
+
+let clockTick = null;
+let lastFlashTrigger = 0;
+
+function formatTime(s){
+  const abs=Math.abs(s),h=Math.floor(abs/3600),m=Math.floor((abs%3600)/60),sec=abs%60;
+  if(h>0) return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+  return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+}
+function getClockString(fmt){
+  const now=new Date();
+  let h=now.getHours(),m=String(now.getMinutes()).padStart(2,'0'),s=String(now.getSeconds()).padStart(2,'0');
+  if(fmt==='12h'){const ampm=h>=12?'PM':'AM';h=h%12||12;return String(h).padStart(2,'0')+':'+m+':'+s+' '+ampm;}
+  return String(h).padStart(2,'0')+':'+m+':'+s;
+}
+
+function startClockTick(fmt){
+  if(clockTick) clearInterval(clockTick);
+  clockDisplay.textContent=getClockString(fmt);
+  clockTick=setInterval(()=>{ clockDisplay.textContent=getClockString(fmt||'24h'); },1000);
+}
+
+function applyState(state){
+  const s=state.settings;
+  blackoutEl.classList.toggle('active',!!state.blackout);
+  gridOverlay.classList.toggle('visible',!!s.gridEnabled);
+  const pc={green:{bg:s.greenBg,text:s.greenText},amber:{bg:s.amberBg,text:s.amberText},red:{bg:s.redBg,text:s.redText}};
+  const c=pc[state.phase]||pc.green;
+  document.documentElement.style.setProperty('--bg',c.bg);
+  document.documentElement.style.setProperty('--text',c.text);
+  document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
+  document.documentElement.style.setProperty('--title-size',s.titleFontSize+'px');
+  document.documentElement.style.setProperty('--speaker-size',(s.speakerFontSize||36)+'px');
+  document.documentElement.style.setProperty('--flash-speed',(s.flashSpeed||0.8)+'s');
+  document.body.style.background=c.bg;
+
+  // Display mode
+  const mode=s.displayMode||'countdown';
+  if(mode==='clock'){
+    timerEl.style.display='none';
+    clockDisplay.style.display='block';
+    clockDisplay.classList.add('primary');
+    startClockTick(s.clockFormat||'24h');
+  } else if(mode==='both'){
+    timerEl.style.display='block';
+    clockDisplay.style.display='block';
+    clockDisplay.classList.remove('primary');
+    startClockTick(s.clockFormat||'24h');
+  } else {
+    timerEl.style.display='block';
+    clockDisplay.style.display='none';
+    if(clockTick){clearInterval(clockTick);clockTick=null;}
+  }
+
+  if(mode!=='clock'){
+    let dt=state.isCountingUp?'+'+formatTime(state.countUpTime):formatTime(state.timeRemaining);
+    timerEl.textContent=dt;
+    timerEl.style.fontFamily="'"+s.fontFamily+"',Orbitron,monospace";
+    timerEl.style.fontSize=s.fontSize+'px';
+    timerEl.style.color=c.text;
+    if(s.glowEnabled) timerEl.style.textShadow='0 0 30px '+c.text+',0 0 60px '+c.text+'44,0 0 100px '+c.text+'22';
+    else timerEl.style.textShadow='none';
+  }
+
+  const flashThresh=s.flashThreshold!==undefined?s.flashThreshold:10;
+  const shouldFlash=s.flashEnabled&&!state.isCountingUp&&state.timeRemaining<=flashThresh&&state.timeRemaining>0&&state.isRunning;
+  if(shouldFlash){
+    const newSpeed=(s.flashSpeed||0.8)+'s';
+    if(!timerEl.classList.contains('flashing') || timerEl.style.animationDuration!==newSpeed){
+      timerEl.classList.remove('flashing');
+      void timerEl.offsetWidth;
+      timerEl.style.animationDuration=newSpeed;
+      timerEl.classList.add('flashing');
+    }
+  } else {
+    timerEl.classList.remove('flashing');
+  }
+
+  // Manual flash trigger
+  if(state.flashTrigger && state.flashTrigger !== lastFlashTrigger){
+    lastFlashTrigger=state.flashTrigger;
+    container.classList.remove('manual-flash');
+    void container.offsetWidth;
+    container.classList.add('manual-flash');
+    setTimeout(()=>container.classList.remove('manual-flash'),1300);
+  }
+
+  sessionNameEl.textContent=state.currentSession?state.currentSession.name:'';
+  sessionNameEl.style.color=c.text;
+  sessionNameEl.style.fontSize=s.titleFontSize+'px';
+  if(s.glowEnabled) sessionNameEl.style.textShadow='0 0 30px '+c.text+'55';
+  else sessionNameEl.style.textShadow='none';
+
+  if(s.showSpeaker!==false && state.currentSession&&state.currentSession.speaker){
+    speakerNameEl.textContent=state.currentSession.speaker;
+    speakerNameEl.style.display='block';
+    speakerNameEl.style.color=c.text;
+  } else {
+    speakerNameEl.style.display='none';
+  }
+
+  if(state.isCountingUp){
+    overtimeBadge.classList.add('visible');
+    overtimeBadge.style.color=c.text; overtimeBadge.style.borderColor=c.text;
+  } else overtimeBadge.classList.remove('visible');
+
+  if(state.showMessage&&state.message){
+    messageText.textContent=state.message;
+    messageText.style.color=s.messageTextColor||'#ffffff';
+    messageOverlay.style.background=s.messageBgColor||'rgba(0,0,0,0.75)';
+    messageOverlay.classList.add('visible');
+  } else messageOverlay.classList.remove('visible');
+
+  if(s.progressBarEnabled){
+    progressContainer.classList.remove('hidden');
+    const pct=Math.max(0,Math.min(1,state.progress))*100;
+    progressBar.style.width=pct+'%';
+    progressBar.style.background=c.text;
+    progressBar.style.boxShadow='0 0 12px '+c.text;
+  } else progressContainer.classList.add('hidden');
+
+  if(s.trafficLightEnabled){
+    trafficLight.classList.add('visible');
+    tlRed.classList.toggle('active',state.phase==='red');
+    tlAmber.classList.toggle('active',state.phase==='amber');
+    tlGreen.classList.toggle('active',state.phase==='green');
+  } else trafficLight.classList.remove('visible');
+}
+
+window.displayAPI.getState().then(applyState);
+window.displayAPI.onStateUpdate(applyState);
+</script>
+</body>
+</html>

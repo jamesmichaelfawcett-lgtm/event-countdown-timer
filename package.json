@@ -1,0 +1,47 @@
+{
+  "name": "event-countdown-timer",
+  "version": "1.0.0",
+  "description": "Professional Event Countdown Timer",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64 --publish never",
+    "build-dir": "electron-builder --win --dir"
+  },
+  "build": {
+    "appId": "com.eventcountdown.timer",
+    "productName": "Event Countdown Timer",
+    "copyright": "Event Countdown Timer",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "preload-display.js",
+      "control.html",
+      "display.html"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerHeaderIcon": null,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Event Countdown Timer"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
